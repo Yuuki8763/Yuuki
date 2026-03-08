@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>批量文字取代工具</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 20px;
+            background-color: #f8f9fa;
+            color: #212529;
+            font-size: 16px;
+        }
+        .container {
+            max-width: 1800px; /* 增加寬度以容納四欄 */
+            width: 100%;
+            margin: auto;
+        }
+        h1 {
+            text-align: center;
+            color: #343a40;
+            margin-bottom: 20px;
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 8px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .controls label {
+            font-weight: 600;
+            margin-right: 5px;
+        }
+        #status {
+            margin-top: 5px;
+            font-style: italic;
+            color: #6c757d;
+            font-weight: 500;
+            flex-grow: 1;
+        }
+        .main-flex-container {
+            display: flex;
+            gap: 20px;
+        }
+        .flex-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .textarea-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #dee2e6;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }
+        h3 {
+            margin-top: 0;
+            margin-bottom: 0;
+            color: #495057;
+        }
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 15px;
+            border: 1px solid #ced4da;
+            border-radius: 8px;
+            font-size: 1rem;
+            line-height: 1.5;
+            resize: vertical;
+            flex-grow: 1; /* 讓 textarea 填滿 flex 容器 */
+        }
+        textarea:focus {
+            border-color: #007bff;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+            outline: none;
+        }
+        
+        /* 按鈕樣式 */
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+        }
+        #updateRulesButton {
+            background-color: #28a745; /* 綠色 - 更新 */
+            color: white;
+            margin-top: 10px;
+            width: 100%;
+        }
+        #updateRulesButton:hover:not(:disabled) {
+            background-color: #218838;
+        }
+        #saveButton {
+            background-color: #007bff; /* 藍色 - 儲存 */
+            color: white;
+        }
+        #saveButton:hover {
+            background-color: #0056b3;
+        }
+        
+        /* 報告區域 */
+        .report-toggle {
+            margin-top: 15px;
+            font-weight: 600;
+        }
+        #reportContainer {
+            display: none; /* 預設隱藏 */
+            margin-top: 10px;
+        }
+        #reportTextarea {
+            height: 250px; /* 報告框的固定高度 */
+            background-color: #f1f3f5;
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #495057;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>批量文字取代工具 v4.4 (修正白名單邏輯)</h1>
+        
+        <div class="controls">
+            <label for="jsonFile">載入規則：</label>
+            <input type="file" id="jsonFile" accept=".json">
+            <button id="saveButton" class="btn">儲存 規則+白名單 .json</button>
+            <div id="status">您可以直接在「規則」欄位中手動輸入，或從 .json 檔案載入。</div>
+        </div>
+        
+        <div class="main-flex-container">
+            <div class="flex-item">
+                <div class="textarea-header">
+                    <h3>1. 規則 (格式: 原始=取代)</h3>
+                </div>
+                <textarea id="rulesTextarea" placeholder="請使用 '原始文字=取代文字' 格式，每行一條規則。&#10;例如：&#10; 視頻=影片&#10; lsp=老色狼&#10; tmd=&#10; # 井字號開頭的行會被忽略 (可當註解)"></textarea>
+                <button id="updateRulesButton" class="btn">🚀 更新並套用規則</button>
+            </div>
+
+            <div class="flex-item">
+                <div class="textarea-header">
+                    <h3>2. 白名單 (不取代)</h3>
+                </div>
+                <textarea id="whitelistTextarea" placeholder="請輸入不想被取代的文字，每行一條。&#10;例如：&#10; 視頻會議&#10; tmd (某個專有名詞)&#10; # 井字號開頭的行會被忽略"></textarea>
+            </div>
+            
+            <div class="flex-item">
+                <div class="textarea-header">
+                    <h3>3. 原始文字 (貼上)</h3>
+                </div>
+                <textarea id="inputText" placeholder="在這裡貼上你要轉換的文字..."></textarea>
+            </div>
+
+            <div class="flex-item">
+                <div class="textarea-header">
+                    <h3>4. 轉換結果 (複製)</h3>
+                </div>
+                <textarea id="outputText" readonly placeholder="轉換結果會顯示在這裡..."></textarea>
+                
+                <div class="report-toggle">
+                    <input type="checkbox" id="showReportCheckbox" style="cursor: pointer;">
+                    <label for="showReportCheckbox" style="cursor: pointer;">顯示轉換報告</label>
+                </div>
+
+                <div id="reportContainer">
+                    <h3>轉換報告</h3>
+                    <textarea id="reportTextarea" readonly></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // *** 核心變數 ***
+        let rulesMap = new Map();
+        let conversionRegex = null;
+        
+        // --- 元素儲存 ---
+        const elements = {
+            status: document.getElementById('status'),
+            rulesTextarea: document.getElementById('rulesTextarea'),
+            whitelistTextarea: document.getElementById('whitelistTextarea'),
+            inputText: document.getElementById('inputText'),
+            outputText: document.getElementById('outputText'),
+            reportTextarea: document.getElementById('reportTextarea'),
+            showReportCheckbox: document.getElementById('showReportCheckbox'),
+            reportContainer: document.getElementById('reportContainer'),
+            saveButton: document.getElementById('saveButton')
+        };
+        
+        // --- 報告切換 ---
+        elements.showReportCheckbox.addEventListener('change', function() {
+            elements.reportContainer.style.display = this.checked ? 'block' : 'none';
+        });
+
+        // --- 核心功能 (更新、載入、轉換) ---
+        
+        // *** 修改：更新按鈕，拆分解析和應用的邏輯 ***
+        document.getElementById('updateRulesButton').addEventListener('click', function() {
+            const { whitelistSet, whitelistCount } = parseWhitelist(elements.whitelistTextarea.value);
+            const { rules, rulesCount } = parseRules(elements.rulesTextarea.value);
+            
+            // 將白名單和規則合併，並設定全域變數
+            buildAndApplyRules(rules, whitelistSet);
+            
+            if (rulesCount > 0 || whitelistCount > 0) {
+                elements.status.textContent = `✅ 規則已更新！ ${rulesCount} 條規則、${whitelistCount} 條白名單生效中。`;
+                elements.status.style.color = 'green';
+            } else {
+                elements.status.textContent = `⚠️ 沒有有效的規則或白名單被載入。`;
+                elements.status.style.color = '#dc3545';
+            }
+            
+            runConversion(); 
+        });
+
+        elements.inputText.addEventListener('input', runConversion);
+
+        // *** 修改：載入 JSON (支援新舊格式) ***
+        document.getElementById('jsonFile').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = JSON.parse(e.target.result);
+                    let rulesString = "";
+                    let whitelistString = "";
+                    let rulesCount = 0;
+                    let whitelistCount = 0;
+                    
+                    // 1. 檢查新格式 (v4.3+)
+                    if (content.version === "v4.2_rules_whitelist" && Array.isArray(content.rules) && Array.isArray(content.whitelist)) {
+                        
+                        rulesString = content.rules
+                            .map(rule => `${rule.key}=${rule.value}`)
+                            .join('\n');
+                        whitelistString = content.whitelist.join('\n');
+
+                        elements.status.textContent = `✅ 成功從 ${file.name} 載入 ${content.rules.length} 條規則與 ${content.whitelist.length} 條白名單。`;
+                        elements.status.style.color = 'green';
+
+                    } 
+                    // 2. 檢查舊格式 (v4.1)
+                    else if (content.kvp && Array.isArray(content.kvp)) {
+                        
+                        rulesString = content.kvp
+                            .map(rule => `${rule.key}=${rule.value}`)
+                            .join('\n');
+                        whitelistString = ""; // 舊格式沒有白名單
+
+                        elements.status.textContent = `⚠️ 成功從 ${file.name} 載入 ${content.kvp.length} 條規則 (舊格式)。白名單已清空。`;
+                        elements.status.style.color = '#fd7e14'; // 橘色
+
+                    } 
+                    // 3. 格式錯誤
+                    else {
+                        throw new Error('JSON 格式不符，找不到 "rules"/"whitelist" 或 "kvp" 陣列。');
+                    }
+                    
+                    // --- 統一載入和套用 ---
+                    elements.rulesTextarea.value = rulesString;
+                    elements.whitelistTextarea.value = whitelistString;
+
+                    const { whitelistSet } = parseWhitelist(whitelistString);
+                    const { rules } = parseRules(rulesString);
+                    buildAndApplyRules(rules, whitelistSet);
+                    
+                    runConversion(); 
+
+                } catch (err) {
+                    elements.status.textContent = `❌ 載入失敗: ${err.message}`;
+                    elements.status.style.color = 'red';
+                }
+            };
+            reader.onerror = function() {
+                elements.status.textContent = '❌ 讀取檔案時發生錯誤。';
+                elements.status.style.color = 'red';
+            };
+            reader.readAsText(file);
+        });
+        
+        // --- 儲存 JSON 功能 (保持不變) ---
+        elements.saveButton.addEventListener('click', function() {
+            try {
+                // 1. 處理規則
+                const { rules, rulesCount } = parseRules(elements.rulesTextarea.value);
+                
+                // 2. 處理白名單
+                const { whitelistSet, whitelistCount } = parseWhitelist(elements.whitelistTextarea.value);
+                const whitelist = Array.from(whitelistSet); // 將 Set 轉回陣列
+                
+                // 3. 建立新的 JSON 結構
+                const finalJsonObject = {
+                    version: "v4.2_rules_whitelist",
+                    rules: rules,
+                    whitelist: whitelist
+                };
+                
+                const jsonString = JSON.stringify(finalJsonObject, null, '\t');
+                const timestamp = new Date().toISOString().replace(/[:.-]/g, '_').slice(0, 15);
+                const filename = `converter_rules_whitelist_${timestamp}.json`;
+                
+                downloadFile(jsonString, filename);
+                
+                elements.status.textContent = `✅ 成功儲存 ${rulesCount} 條規則與 ${whitelistCount} 條白名單至 ${filename}`;
+                elements.status.style.color = 'green';
+                
+            } catch (err) {
+                elements.status.textContent = `❌ 儲存失敗: ${err.message}`;
+                elements.status.style.color = 'red';
+            }
+        });
+
+        function downloadFile(content, filename) {
+            const blob = new Blob([content], {type: "application/json;charset=utf-8"});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        }
+
+        // *** 新增：解析白名單 (取代 processWhitelist) ***
+        function parseWhitelist(whitelistString) {
+            const whitelistSet = new Set();
+            const lines = whitelistString.split('\n');
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (trimmedLine && !trimmedLine.startsWith('#')) {
+                    whitelistSet.add(trimmedLine);
+                }
+            }
+            return { whitelistSet, whitelistCount: whitelistSet.size };
+        }
+
+        // *** 新增：解析規則 (取代 processRules) ***
+        function parseRules(rulesString) {
+            const rules = [];
+            const lines = rulesString.split('\n');
+            
+            for (const line of lines) {
+                const trimmedLineCheck = line.trim();
+                if (trimmedLineCheck.startsWith('#') || trimmedLineCheck === '') continue;
+
+                const separatorIndex = line.indexOf('=');
+                let key, value;
+
+                if (separatorIndex === -1) {
+                    key = line;
+                    value = "";
+                } else {
+                    key = line.substring(0, separatorIndex);
+                    value = line.substring(separatorIndex + 1);
+                }
+                
+                if (key) {
+                    rules.push({ key, value });
+                }
+            }
+            return { rules, rulesCount: rules.length };
+        }
+
+        // *** 新增：合併規則和白名單，並設定全域變數 ***
+        function buildAndApplyRules(rules, whitelistSet) {
+            // 1. 將白名單項目轉換為「取代為自己」的規則
+            for (const whitelistedWord of whitelistSet) {
+                rules.push({ key: whitelistedWord, value: whitelistedWord });
+            }
+            
+            // 2. 排序：確保長關鍵字優先 (例如 "太潤了" > "潤了")
+            // 這將使白名單規則優先於其子字串的規則
+            rules.sort((a, b) => b.key.length - a.key.length);
+            
+            // 3. 建立 Map (如果key重複，例如白名單和規則相同，後者會覆蓋前者，
+            //    但因為白名單(key=key)在後面加入，它會覆蓋(key=value)規則，這是正確的)
+            rulesMap = new Map(rules.map(r => [r.key, r.value]));
+            
+            // 4. 建立 RegExp
+            const keysForRegex = rules.map(r => escapeRegExp(r.key));
+            
+            if (keysForRegex.length > 0) {
+                // 從 Map 中取得去重後的 key 來建立 RegExp，確保排序正確
+                const uniqueSortedKeys = Array.from(rulesMap.keys());
+                uniqueSortedKeys.sort((a, b) => b.length - a.length); // 再次排序以確保 Map 迭代順序
+                const keysForFinalRegex = uniqueSortedKeys.map(key => escapeRegExp(key));
+                
+                conversionRegex = new RegExp(keysForFinalRegex.join('|'), 'g');
+            } else {
+                conversionRegex = null;
+            }
+        }
+
+
+        // --- 執行轉換 (*** 修改：移除舊的白名單檢查 ***) ---
+        function runConversion() {
+            const reportLog = {};
+            const text = elements.inputText.value;
+            if (!conversionRegex) {
+                elements.outputText.value = text;
+                updateReport(reportLog);
+                return;
+            }
+            
+            let newText = text.replace(conversionRegex, (matched) => {
+                
+                // *** 移除: if (whitelistSet.has(matched)) { ... } ***
+                // 舊的白名單檢查已不需要，
+                // 因為 "太潤了" 會匹配到 `rulesMap.get("太潤了")`，
+                // 其值為 "太潤了"，達到了白名單的效果。
+
+                const replacement = rulesMap.get(matched);
+                
+                // 只在報告中顯示實際有變更的
+                if (matched !== replacement) {
+                    const ruleKey = `${matched} -> ${replacement}`;
+                    reportLog[ruleKey] = (reportLog[ruleKey] || 0) + 1;
+                }
+                
+                return replacement;
+            });
+            
+            elements.outputText.value = newText;
+            updateReport(reportLog);
+        }
+
+        // --- 更新報告 (*** 修改：過濾掉 A -> A 的報告 ***) ---
+        function updateReport(reportLog) {
+            let reportString = "";
+            let totalConversions = 0;
+            const sortedReport = Object.entries(reportLog).sort((a, b) => b[1] - a[1]);
+            
+            for (const [rule, count] of sortedReport) {
+                reportString += `(${count} 次) ${rule}\n`;
+                totalConversions += count;
+            }
+            
+            if (totalConversions === 0) {
+                elements.reportTextarea.value = "無任何內容被取代。";
+            } else {
+                elements.reportTextarea.value = `總共 ${totalConversions} 次取代：\n----------\n` + reportString;
+            }
+        }
+
+        // 處理 RegExp 的特殊字元 (保持不變)
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+    </script>
+</body>
+</html>
